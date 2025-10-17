@@ -1,0 +1,7 @@
+{
+  "name": "countdown-mod-card",
+  "content_in_root": true,
+  "render_readme": true,
+  "filename": "countdown_mod_card.js",
+  "homeassistant": "2023.10.0"
+}
