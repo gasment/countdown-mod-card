@@ -431,4 +431,4 @@ class CountdownModCard extends LitElement {
 
 customElements.define('countdown-mod-card', CountdownModCard);
 window.customCards = window.customCards || [];
-window.customCards.push({ type: "countdown-mod-card", name: "Countdown Mod Card", description: "一个紧凑型倒计时卡片", preview: true });
+window.customCards.push({ type: "countdown-mod-card", name: "Countdown Mod Card v1.0.1", description: "一个紧凑型倒计时卡片", preview: true });
