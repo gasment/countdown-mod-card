@@ -15,7 +15,7 @@
 ---
 ### 卡片预览
 - 操作演示
-- ![](https://github.com/gasment/countdown-mod-card/blob/main/preview1.webp)
+- ![](https://github.com/gasment/countdown-mod-card/blob/main/preview4.webp)
 - 倒计时完成后触发实体操作
 - ![](https://github.com/gasment/countdown-mod-card/blob/main/preview2.webp)
 - 根据交互发生的位置，动态改变刻度气泡的左右侧弹出，触摸数字部分左侧则右弹出，触摸数字右侧则左弹出
