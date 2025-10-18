@@ -1,4 +1,3 @@
-// --- No changes to imports ---
 import {
   LitElement,
   css,
@@ -14,7 +13,42 @@ import {
 
 class CountdownModCard extends LitElement {
 
-  // ... (All JavaScript code from the previous version remains unchanged) ...
+  // ... (大部分JS代码与 v3.1.0 相同) ...
+  
+  _handleInteractionStart(e, type) {
+    if (this._isSliding) return;
+    e.preventDefault();
+    const entityState = this.hass.states[this.config.timer_entity];
+    this._wasActiveOnSlideStart = entityState && entityState.state === 'active';
+    if (this._wasActiveOnSlideStart) { 
+        const [h, m, s] = this._remainingTime.split(':').map(Number); 
+        this._hours = h; 
+        this._minutes = m; 
+        this._seconds = s; 
+    } else { 
+        this._seconds = 0;
+    }
+    
+    this._isSliding = true;
+    this._slidingType = type;
+    this._slidingInitialValue = type === 'hours' ? this._hours : this._minutes;
+    this._slidingCurrentValue = this._slidingInitialValue;
+    
+    const isTouch = e.type === 'touchstart';
+    this._interactionStartY = isTouch ? e.touches[0].clientY : e.clientY;
+
+    this._createAndShowBubble(e.currentTarget, isTouch ? e.touches[0] : e);
+
+    // --- THE ULTIMATE FIX for containers that stop propagation ---
+    const eventOptions = { capture: true, passive: false };
+    
+    window.addEventListener(isTouch ? 'touchmove' : 'mousemove', this._handleInteractionMove, eventOptions);
+    window.addEventListener(isTouch ? 'touchend' : 'mouseup', this._handleInteractionEnd, eventOptions);
+  }
+
+  // ... (其余所有代码，包括 constructor, render, styles 等都保持不变) ...
+
+  // <editor-fold desc="Unchanged Code - Collapsed for Readability">
   static _getTemplates() {
     try {
       const lovelace = document.querySelector("home-assistant")
@@ -109,7 +143,8 @@ class CountdownModCard extends LitElement {
     if (this._timerInterval) return;
     const finishesAt = new Date(entity.attributes.finishes_at).getTime();
     const updateDisplay = () => {
-      const now = new Date().getTime();
+      const now = new Date().getTime() + (this.hass.connection.serverTimeOffset || 0);
+      
       const remainingMs = finishesAt - now;
       if (remainingMs < -1000) {
         this._stopUpdatingRemainingTime();
@@ -130,10 +165,11 @@ class CountdownModCard extends LitElement {
   disconnectedCallback() {
     super.disconnectedCallback();
     this._stopUpdatingRemainingTime();
-    window.removeEventListener("mousemove", this._handleInteractionMove);
-    window.removeEventListener("mouseup", this._handleInteractionEnd);
-    window.removeEventListener("touchmove", this._handleInteractionMove);
-    window.removeEventListener("touchend", this._handleInteractionEnd);
+    const eventOptions = { capture: true, passive: false };
+    window.removeEventListener("mousemove", this._handleInteractionMove, eventOptions);
+    window.removeEventListener("mouseup", this._handleInteractionEnd, eventOptions);
+    window.removeEventListener("touchmove", this._handleInteractionMove, eventOptions);
+    window.removeEventListener("touchend", this._handleInteractionEnd, eventOptions);
     this._sliderBubbleEl?.remove();
     this._sliderBubbleEl = null;
   }
@@ -167,41 +203,28 @@ class CountdownModCard extends LitElement {
   
   _computeStyles(e){if(!this._configProcessed || !this.config.styles||!this.config.styles[e])return"";return this.config.styles[e].map((t=>{const s=Object.keys(t)[0],i=this._evaluateTemplate(t[s]);return`${s}: ${i};`})).join("")}
   
+  _startFromIdle() {
+    this._seconds = 0;
+    this._handleStart();
+  }
+
   _handleStart() {
-    const durationString = `${String(this._hours).padStart(2, '0')}:${String(this._minutes).padStart(2, '0')}:${String(this._seconds).padStart(2, '0')}`;
     const totalSeconds = this._hours * 3600 + this._minutes * 60 + this._seconds;
     if (totalSeconds > 0) {
       this._stopUpdatingRemainingTime();
-      this.hass.callService("timer", "start", { entity_id: this.config.timer_entity, duration: durationString });
+      this.hass.callService("timer", "start", { 
+        entity_id: this.config.timer_entity, 
+        duration: totalSeconds 
+      });
     }
   }
   
   _handleStop() { this.hass.callService("timer", "cancel", { entity_id: this.config.timer_entity }); }
 
-  _handleInteractionStart(e, type) {
-    if (this._isSliding) return;
-    e.preventDefault();
-    const entityState = this.hass.states[this.config.timer_entity];
-    this._wasActiveOnSlideStart = entityState && entityState.state === 'active';
-    if (this._wasActiveOnSlideStart) { const [h, m, s] = this._remainingTime.split(':').map(Number); this._hours = h; this._minutes = m; this._seconds = s; } else { this._seconds = 0; }
-    
-    this._isSliding = true;
-    this._slidingType = type;
-    this._slidingInitialValue = type === 'hours' ? this._hours : this._minutes;
-    this._slidingCurrentValue = this._slidingInitialValue;
-    
-    const isTouch = e.type === 'touchstart';
-    this._interactionStartY = isTouch ? e.touches[0].clientY : e.clientY;
-
-    this._createAndShowBubble(e.currentTarget, isTouch ? e.touches[0] : e);
-
-    window.addEventListener(isTouch ? 'touchmove' : 'mousemove', this._handleInteractionMove);
-    window.addEventListener(isTouch ? 'touchend' : 'mouseup', this._handleInteractionEnd);
-  }
-
   _handleInteractionMove(e) {
     if (!this._isSliding) return;
     e.preventDefault();
+    e.stopPropagation(); // Good practice to also stop propagation here
     const isTouch = e.type === 'touchmove';
     const currentY = isTouch ? e.touches[0].clientY : e.clientY;
     const deltaY = this._interactionStartY - currentY;
@@ -216,20 +239,29 @@ class CountdownModCard extends LitElement {
     this._updateBubbleContent();
   }
 
-  _handleInteractionEnd() {
+  _handleInteractionEnd(e) {
     if (!this._isSliding) return;
+    e.stopPropagation(); // Good practice
     if (this._slidingType === 'hours') { this._hours = this._slidingCurrentValue; } else { this._minutes = this._slidingCurrentValue; }
     this._isSliding = false;
     this._slidingType = null;
     
     this._hideAndRemoveBubble();
 
-    window.removeEventListener('mousemove', this._handleInteractionMove);
-    window.removeEventListener('mouseup', this._handleInteractionEnd);
-    window.removeEventListener('touchmove', this._handleInteractionMove);
-    window.removeEventListener('touchend', this._handleInteractionEnd);
+    const eventOptions = { capture: true, passive: false };
+    window.removeEventListener('mousemove', this._handleInteractionMove, eventOptions);
+    window.removeEventListener('mouseup', this._handleInteractionEnd, eventOptions);
+    window.removeEventListener('touchmove', this._handleInteractionMove, eventOptions);
+    window.removeEventListener('touchend', this._handleInteractionEnd, eventOptions);
     
-    if (this._wasActiveOnSlideStart) { const totalSeconds = this._hours * 3600 + this._minutes * 60 + this._seconds; if (totalSeconds > 0) { this._handleStart(); } else { this._handleStop(); } }
+    if (this._wasActiveOnSlideStart) { 
+        const totalSeconds = this._hours * 3600 + this._minutes * 60 + this._seconds; 
+        if (totalSeconds > 0) { 
+            this._handleStart(); 
+        } else { 
+            this._handleStop(); 
+        } 
+    }
     this._wasActiveOnSlideStart = false;
   }
 
@@ -316,20 +348,25 @@ class CountdownModCard extends LitElement {
               <div class="time-part ${this._isSliding && this._slidingType === 'minutes' ? 'sliding' : ''}" @mousedown="${(e) => this._handleInteractionStart(e, 'minutes')}" @touchstart="${(e) => this._handleInteractionStart(e, 'minutes')}">${part2}</div>
             </div>
           </div>
-          <button class="action-button ${isTimerActive ? 'stop' : 'start'}" style=${this._computeStyles('button')} @click="${isTimerActive ? this._handleStop : this._handleStart}" ?disabled="${!isTimerActive && isStartDisabled}">${buttonContent}</button>
+          <button 
+            class="action-button ${isTimerActive ? 'stop' : 'start'}" 
+            style=${this._computeStyles('button')} 
+            @click="${isTimerActive ? this._handleStop : this._startFromIdle}" 
+            ?disabled="${!isTimerActive && isStartDisabled}">
+            ${buttonContent}
+          </button>
         </div>
       </ha-card>
     `;
   }
 
-  // --- CSS ONLY CHANGE ---
   static get styles() {
     const styleId = 'countdown-mod-card-bubble-styles';
     if (!document.getElementById(styleId)) {
         const style = document.createElement('style');
         style.id = styleId;
         style.innerHTML = `
-          .slider-bubble { position: fixed; z-index: 9999; width: 100px; height: 160px; background: rgba(40, 40, 40, 0.9); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 20px; display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 30px rgba(0,0,0,0.4); pointer-events: none; opacity: 0; }
+          .slider-bubble { position: fixed; z-index: 9999; width: 100px; height: 160px; background: rgba(40, 40, 40, 0.9); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 20px; padding: 0px; display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 30px rgba(0,0,0,0.4); pointer-events: none; opacity: 0; }
           .slider-bubble.left { transform-origin: right center; animation: bubble-appear-left 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
           .slider-bubble.right { transform-origin: left center; animation: bubble-appear-right 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
           .slider-bubble.closing.left { animation: bubble-disappear-left 0.2s ease-out forwards; }
@@ -338,9 +375,9 @@ class CountdownModCard extends LitElement {
           @keyframes bubble-appear-right { from { opacity: 0; transform: translate(10px, -50%) scale(0.8); } to { opacity: 1; transform: translate(10px, -50%) scale(1); } }
           @keyframes bubble-disappear-left { to { opacity: 0; transform: translate(calc(-100% - 10px), -50%) scale(0.8); } }
           @keyframes bubble-disappear-right { to { opacity: 0; transform: translate(10px, -50%) scale(0.8); } }
-          .bubble-value { font-size: 48px; font-weight: 500; color: white; flex-grow: 1; display: flex; align-items: center; justify-content: center; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-          .bubble-ruler { height: 140px; width: 20px; margin-right: 10px; }
-          .bubble-ruler svg { width: 100%; height: 100%; }
+          .bubble-value { font-size: 48px; font-weight: 500; color: white; flex-grow: 1; display: flex; align-items: center; justify-content: center; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin-left: 10px;}
+          .bubble-ruler { height: 140px; width: 20px; margin-right: 10px;}
+          .bubble-ruler svg { width: 100%; height: 100%;}
           .bubble-ruler line { stroke: rgba(255, 255, 255, 0.5); stroke-width: 1.5; stroke-linecap: round; }
           .bubble-ruler .main-line { stroke-width: 2; }
           .bubble-ruler .indicator { fill: var(--primary-color, #03a9f4); stroke: white; stroke-width: 1.5; }
@@ -354,7 +391,6 @@ class CountdownModCard extends LitElement {
         box-sizing: border-box;
         position: relative;
         display: flex;
-        /* THE FIX Part 1: Allow content to be visually rendered outside the card's bounds */
         overflow: visible !important;
       }
       .main-container { width: 100%; display: grid; grid-template-columns: 1fr auto; grid-template-areas: "timer button"; align-items: center; }
@@ -363,13 +399,19 @@ class CountdownModCard extends LitElement {
       .action-button { grid-area: button; }
       .time-setter { display: flex; justify-content: center; align-items: baseline; font-size: 40px; font-weight: 400; color: var(--primary-text-color); transition: color 0.3s ease; }
       .time-setter.active { color: var(--primary-color); }
-      .time-part { padding: 4px 8px; border-radius: 8px; cursor: grab; user-select: none; transition: background-color 0.2s ease, color 0.2s ease; }
+      .time-part {
+        padding: 4px 8px;
+        border-radius: 8px;
+        cursor: grab;
+        user-select: none;
+        transition: background-color 0.2s ease, color 0.2s ease;
+        touch-action: none;
+      }
       .time-part:hover { background-color: rgba(120, 120, 128, 0.16); }
       .time-part.sliding {
         cursor: grabbing;
         background-color: var(--primary-color);
         color: white;
-        /* THE FIX Part 2: Promote the sliding element to its own layer */
         position: relative;
         z-index: 1;
       }
@@ -384,8 +426,9 @@ class CountdownModCard extends LitElement {
       .action-button ha-icon, .action-button img { color: inherit; max-width: 70%; max-height: 70%; }
     `;
   }
+  // </editor-fold>
 }
 
 customElements.define('countdown-mod-card', CountdownModCard);
 window.customCards = window.customCards || [];
-window.customCards.push({ type: "countdown-mod-card", name: "Countdown Mod Card", description: "A compact countdown card with actions and ruler popup.", preview: true });
+window.customCards.push({ type: "countdown-mod-card", name: "Countdown Mod Card", description: "一个紧凑型倒计时卡片", preview: true });
