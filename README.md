@@ -30,21 +30,52 @@
 ### HA实体与自动化配置
 每个该卡片需要一个唯一记时器实体，以及一条自动化用于倒计时结束后的实体执行
 - 记时器实体：创建一个计时器辅助元素，记录其timer实体ID
-- 自动化，监听该计时器的timer.finished事件，继而触发后续操作，自动化yaml配置示例：
+- 自动化，监听该计时器的timer.finished事件，继而触发后续操作，同时监听实体的关闭操作，用于自动取消计时器，自动化yaml配置示例：
   ```
-  alias: xxxx定时器
+  alias: test计时器
   description: ""
   triggers:
-    - event_type: timer.finished
+    - trigger: event
+      event_type: timer.finished
       event_data:
-        entity_id: timer.your_entity_id  #你的计时器实体
-      trigger: event
+        entity_id: timer.your_timer_entity   #替换你的timer实体
+      alias: 计时器自然结束
+      id: 计时器自然结束
+    - trigger: state
+      entity_id:
+        - switch.your_switch_entity  #替换你的switch实体
+      from: "on"
+      to: "off"
+      alias: 实体被手动关闭
+      id: 实体被手动关闭
+  conditions: []
   actions:
-    - action: switch.turn_off  #关闭操作
-      data: {}
-      target:
-        entity_id: switch.your_entity_id  #你的开关实体
+    - alias: 事件分流
+      choose:
+        - conditions:
+            - condition: trigger
+              id:
+                - 计时器自然结束
+          sequence:
+            - action: switch.turn_off
+              target:
+                entity_id: switch.your_switch_entity #替换你的switch实体
+              alias: 关闭实体
+          alias: 自然结束-关闭实体
+        - conditions:
+            - condition: trigger
+              id:
+                - 实体被手动关闭
+            - condition: state
+              entity_id: timer.your_timer_entity #替换你的timer实体
+              state: active
+          sequence:
+            - action: timer.cancel
+              target:
+                entity_id: timer.your_timer_entity  #替换你的timer实体
+          alias: 手动关闭-取消计时
   mode: single
+
   ```
 ### 配置选项 (Configuration Options)
 | 配置项 | 效果说明 | 使用说明 | 配置示例 |
