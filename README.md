@@ -151,6 +151,12 @@ styles 对象下可以包含 card, grid, title, timer, button 等键。每个键
         - padding: 0px
         - margin-top: 6px
     ```
+- styles -> timer_part，定义计时器数字部分样式
+    ```
+    styles:
+      timer_part:
+        - padding: 4px 8px
+    ```
 
 预览卡片配置示例：
 ```
