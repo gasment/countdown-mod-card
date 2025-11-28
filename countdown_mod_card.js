@@ -1,3 +1,4 @@
+//v1.1.0
 import {
   LitElement,
   css,
@@ -11,10 +12,7 @@ import {
 } from "https://unpkg.com/lit-html@1.1.2/lit-html.js?module";
 
 
-class CountdownModCard extends LitElement {
-
-  // ... (大部分JS代码与 v3.1.0 相同) ...
-  
+class CountdownModCard extends LitElement { 
   _handleInteractionStart(e, type) {
     if (this._isSliding) return;
     e.preventDefault();
@@ -46,7 +44,6 @@ class CountdownModCard extends LitElement {
     window.addEventListener(isTouch ? 'touchend' : 'mouseup', this._handleInteractionEnd, eventOptions);
   }
 
-  // ... (其余所有代码，包括 constructor, render, styles 等都保持不变) ...
 
   // <editor-fold desc="Unchanged Code - Collapsed for Readability">
   static _getTemplates() {
@@ -175,33 +172,112 @@ class CountdownModCard extends LitElement {
   }
   
   _evaluateTemplate(value) {
+    // 配置还没处理好，或者不是字符串，直接原样返回
     if (!this._configProcessed) return value;
-    if (typeof value !== 'string') return value;
+    if (typeof value !== "string") return value;
+
     const trimmedValue = value.trim();
-    if (!trimmedValue.startsWith('[[[') || !trimmedValue.endsWith(']]]')) return value;
+    // 不是 [[[ ]]] 模板，直接返回
+    if (!trimmedValue.startsWith('[[[') || !trimmedValue.endsWith(']]]')) {
+      return value;
+    }
+
     try {
+      // 去掉开头的 [[[ 和结尾的 ]]]
       const template = trimmedValue.substring(3, trimmedValue.length - 3);
       const entityState = this.hass.states[this.config.timer_entity];
+
+      // 先处理 variables
       const rawVariables = this.config.variables || {};
       const evaluatedVariables = {};
+
       for (const key in rawVariables) {
-        if (typeof rawVariables[key] === 'string' && rawVariables[key].trim().startsWith('[[[')) {
-          const varTemplate = rawVariables[key].substring(3, rawVariables[key].length - 3);
-          const varFunc = new Function('states', 'entity', 'user', 'hass', 'config', varTemplate);
-          evaluatedVariables[key] = varFunc(this.hass.states, entityState, this.hass.user, this.hass, this.config);
+        const raw = rawVariables[key];
+
+        if (typeof raw === "string") {
+          const trimmedVar = raw.trim();
+
+          // 只有在 [[[ ]]] 包裹时才当成模板执行
+          if (trimmedVar.startsWith('[[[') && trimmedVar.endsWith(']]]')) {
+            const varTemplate = trimmedVar.substring(3, trimmedVar.length - 3);
+            try {
+              // 变量也可以互相引用，所以把 variables 也一起传进去
+              const varFunc = new Function(
+                "states",
+                "entity",
+                "user",
+                "hass",
+                "config",
+                "variables",
+                varTemplate
+              );
+              evaluatedVariables[key] = varFunc(
+                this.hass.states,
+                entityState,
+                this.hass.user,
+                this.hass,
+                this.config,
+                evaluatedVariables
+              );
+            } catch (err) {
+              console.error(
+                "Error evaluating variable template:",
+                key,
+                err,
+                "Template:",
+                raw
+              );
+              evaluatedVariables[key] = null;
+            }
+          } else {
+            // 普通字符串，直接用
+            evaluatedVariables[key] = raw;
+          }
         } else {
-          evaluatedVariables[key] = rawVariables[key];
+          // 非字符串类型，原样透传
+          evaluatedVariables[key] = raw;
         }
       }
-      const func = new Function('states', 'entity', 'user', 'hass', 'config', 'variables', template);
-      return func(this.hass.states, entityState, this.hass.user, this.hass, this.config, evaluatedVariables);
+
+      // 最终模板执行，把 variables 也带进去
+      const func = new Function(
+        "states",
+        "entity",
+        "user",
+        "hass",
+        "config",
+        "variables",
+        template
+      );
+      return func(
+        this.hass.states,
+        entityState,
+        this.hass.user,
+        this.hass,
+        this.config,
+        evaluatedVariables
+      );
     } catch (e) {
       console.error("Error evaluating template:", e, "Template:", value);
-      return `TEMPLATE_ERROR`;
+      return "TEMPLATE_ERROR";
     }
   }
-  
-  _computeStyles(e){if(!this._configProcessed || !this.config.styles||!this.config.styles[e])return"";return this.config.styles[e].map((t=>{const s=Object.keys(t)[0],i=this._evaluateTemplate(t[s]);return`${s}: ${i};`})).join("")}
+
+
+
+  _computeStyles(key) {
+    if (!this._configProcessed || !this.config.styles || !this.config.styles[key])
+      return "";
+
+    return this.config.styles[key]
+      .map((obj) => {
+        const cssKey = Object.keys(obj)[0];
+        const rawVal = obj[cssKey];
+        const val = this._evaluateTemplate(rawVal);
+        return `${cssKey}: ${val};`;
+      })
+      .join(" ");
+  }
   
   _startFromIdle() {
     this._seconds = 0;
@@ -321,38 +397,107 @@ class CountdownModCard extends LitElement {
   }
 
   render() {
-    if (!this._configProcessed) { return cardHtml``; }
+    if (!this._configProcessed) {
+      return cardHtml``;
+    }
+
     const entityState = this.hass.states[this.config.timer_entity];
-    const isTimerActive = entityState && entityState.state === 'active';
+    const isTimerActive = entityState && entityState.state === "active";
+
     const isStartDisabled = (this._hours * 3600 + this._minutes * 60) === 0;
+
     let part1, part2;
-    const [h, m, s] = this._remainingTime.split(':').map(Number);
+
+    const [h, m, s] = this._remainingTime.split(":").map(Number);
     const totalRemainingSeconds = h * 3600 + m * 60 + s;
+
     if (this._isSliding) {
-        part1 = String(this._slidingType === 'hours' ? this._slidingCurrentValue : this._hours).padStart(2, '0');
-        part2 = String(this._slidingType === 'minutes' ? this._slidingCurrentValue : this._minutes).padStart(2, '0');
+      // 正在滑动时，用滑动中的值
+      part1 = String(
+        this._slidingType === "hours" ? this._slidingCurrentValue : this._hours
+      ).padStart(2, "0");
+      part2 = String(
+        this._slidingType === "minutes" ? this._slidingCurrentValue : this._minutes
+      ).padStart(2, "0");
     } else if (isTimerActive) {
-      if (totalRemainingSeconds > 0 && totalRemainingSeconds < 60 && !this.config.always_show_minutes) { part1 = String(m).padStart(2, '0'); part2 = String(s).padStart(2, '0'); } else { part1 = String(h).padStart(2, '0'); part2 = String(m).padStart(2, '0'); }
-    } else { part1 = String(this._hours).padStart(2, '0'); part2 = String(this._minutes).padStart(2, '0'); }
+      // 计时器运行中，可能显示 mm:ss 或 hh:mm
+      if (
+        totalRemainingSeconds > 0 &&
+        totalRemainingSeconds < 60 &&
+        !this.config.always_show_minutes
+      ) {
+        part1 = String(m).padStart(2, "0");
+        part2 = String(s).padStart(2, "0");
+      } else {
+        part1 = String(h).padStart(2, "0");
+        part2 = String(m).padStart(2, "0");
+      }
+    } else {
+      // 空闲时显示配置好的 hours / minutes
+      part1 = String(this._hours).padStart(2, "0");
+      part2 = String(this._minutes).padStart(2, "0");
+    }
+
     const currentIcon = isTimerActive ? this.config.stop_icon : this.config.start_icon;
     let buttonContent;
-    if (currentIcon) { const evaluatedIcon = this._evaluateTemplate(currentIcon); if (evaluatedIcon.startsWith('mdi:')) { buttonContent = cardHtml`<ha-icon .icon=${evaluatedIcon}></ha-icon>`; } else { buttonContent = cardHtml`<img src=${evaluatedIcon} />`; } } else { buttonContent = isTimerActive ? '停用' : '开始'; }
+
+    if (currentIcon) {
+      const evaluatedIcon = this._evaluateTemplate(currentIcon);
+      if (typeof evaluatedIcon === "string" && evaluatedIcon.startsWith("mdi:")) {
+        buttonContent = cardHtml`<ha-icon .icon=${evaluatedIcon}></ha-icon>`;
+      } else {
+        buttonContent = cardHtml`<img src=${evaluatedIcon} />`;
+      }
+    } else {
+      buttonContent = isTimerActive ? "停用" : "开始";
+    }
+
     return cardHtml`
-      <ha-card style=${this._computeStyles('card')}>
-        <div class="main-container" style=${this._computeStyles('grid')}>
-          ${this.config.title ? cardHtml`<div class="title" style=${this._computeStyles('title')}>${this._evaluateTemplate(this.config.title)}</div>` : ''}
+      <ha-card style=${this._computeStyles("card")}>
+        <div class="main-container" style=${this._computeStyles("grid")}>
+          ${this.config.title
+            ? cardHtml`<div class="title" style=${this._computeStyles("title")}>
+                ${this._evaluateTemplate(this.config.title)}
+              </div>`
+            : ""}
+
           <div class="time-display">
-            <div class="time-setter ${isTimerActive ? 'active' : ''}" style=${this._computeStyles('timer')}>
-              <div class="time-part ${this._isSliding && this._slidingType === 'hours' ? 'sliding' : ''}" @mousedown="${(e) => this._handleInteractionStart(e, 'hours')}" @touchstart="${(e) => this._handleInteractionStart(e, 'hours')}">${part1}</div>
-              <div class="colon ${isTimerActive ? 'blinking' : ''}">:</div>
-              <div class="time-part ${this._isSliding && this._slidingType === 'minutes' ? 'sliding' : ''}" @mousedown="${(e) => this._handleInteractionStart(e, 'minutes')}" @touchstart="${(e) => this._handleInteractionStart(e, 'minutes')}">${part2}</div>
+            <div
+              class="time-setter ${isTimerActive ? "active" : ""}"
+              style=${this._computeStyles("timer")}
+            >
+              <div
+                class="time-part ${this._isSliding && this._slidingType === "hours"
+                  ? "sliding"
+                  : ""}"
+                style=${this._computeStyles("timer_part")}
+                @mousedown="${(e) => this._handleInteractionStart(e, "hours")}"
+                @touchstart="${(e) => this._handleInteractionStart(e, "hours")}"
+              >
+                ${part1}
+              </div>
+
+              <div class="colon ${isTimerActive ? "blinking" : ""}">:</div>
+
+              <div
+                class="time-part ${this._isSliding && this._slidingType === "minutes"
+                  ? "sliding"
+                  : ""}"
+                style=${this._computeStyles("timer_part")}
+                @mousedown="${(e) => this._handleInteractionStart(e, "minutes")}"
+                @touchstart="${(e) => this._handleInteractionStart(e, "minutes")}"
+              >
+                ${part2}
+              </div>
             </div>
           </div>
-          <button 
-            class="action-button ${isTimerActive ? 'stop' : 'start'}" 
-            style=${this._computeStyles('button')} 
-            @click="${isTimerActive ? this._handleStop : this._startFromIdle}" 
-            ?disabled="${!isTimerActive && isStartDisabled}">
+
+          <button
+            class="action-button ${isTimerActive ? "stop" : "start"}"
+            style=${this._computeStyles("button")}
+            @click="${isTimerActive ? this._handleStop : this._startFromIdle}"
+            ?disabled="${!isTimerActive && isStartDisabled}"
+          >
             ${buttonContent}
           </button>
         </div>
@@ -431,4 +576,4 @@ class CountdownModCard extends LitElement {
 
 customElements.define('countdown-mod-card', CountdownModCard);
 window.customCards = window.customCards || [];
-window.customCards.push({ type: "countdown-mod-card", name: "Countdown Mod Card v1.0.1", description: "一个紧凑型倒计时卡片", preview: true });
+window.customCards.push({ type: "countdown-mod-card", name: "Countdown Mod Card v1.1.0", description: "一款为 Home Assistant Lovelace 设计的现代化、紧凑型倒计时卡片", preview: true });
