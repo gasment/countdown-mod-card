@@ -1,4 +1,4 @@
-//v1.1.0
+//v1.1.1
 import {
   LitElement,
   css,
@@ -552,7 +552,7 @@ class CountdownModCard extends LitElement {
         transition: background-color 0.2s ease, color 0.2s ease;
         touch-action: none;
       }
-      .time-part:hover { background-color: rgba(120, 120, 128, 0.16); }
+      .time-part:hover { background-color: rgba(0, 0, 0, 0); }
       .time-part.sliding {
         cursor: grabbing;
         background-color: var(--primary-color);
@@ -576,4 +576,4 @@ class CountdownModCard extends LitElement {
 
 customElements.define('countdown-mod-card', CountdownModCard);
 window.customCards = window.customCards || [];
-window.customCards.push({ type: "countdown-mod-card", name: "Countdown Mod Card v1.1.0", description: "一款为 Home Assistant Lovelace 设计的现代化、紧凑型倒计时卡片", preview: true });
+window.customCards.push({ type: "countdown-mod-card", name: "Countdown Mod Card v1.1.1", description: "一款为 Home Assistant Lovelace 设计的现代化、紧凑型倒计时卡片", preview: true });
